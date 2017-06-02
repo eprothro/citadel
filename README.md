@@ -78,6 +78,9 @@ composite IAM roles, possibly driven by Chef roles or other metadata.
 
 You can access secret data via the `citadel` method.
 
+* The key used indicates the S3 object to fetch within the citadel bucket.
+* The value returned is the entire contents of the S3 object (e.g. file).
+
 ```ruby
 file '/etc/secret' do
   owner 'root'
@@ -97,6 +100,45 @@ template '/etc/secret' do
   mode '600'
   variables secret: citadel('mybucket')['id_rsa']
 end
+```
+
+## AWS / S3 Convention
+
+I recommend:
+
+* Using a single S3 bucket for all credentials
+* Creating one directory for each group of secrets with identical security requirements
+* Using IAM policies with specific resources granted per group
+
+Many groups/directories will start out only containing a single file, however having the flexibility to change this in the future allows for things like key rotation without rewriting all of your IAM policies.
+
+### Example
+
+How you choose separate groups should be dictated by your application and its security needs. Below is just one example, your thread model should dictate the choices you make.
+
+S3 Objects
+  * my_secrets_bucket/
+    * ec2/
+      * credentials
+    * s3cmd/
+      * credentials
+    * redis_sandbox/
+      * password
+    * redis_prod/
+      * password
+
+```
+"Resource": [
+  "arn:aws:s3:::my_secrets_bucket/ec2/*",
+  "arn:aws:s3:::my_secrets_bucket/redis_sandbox/*",
+]
+```
+
+```
+citadel["ec2/credentials"]
+```
+```
+citadel["redis_#{node.chef_environment}/password"]
 ```
 
 ## Developing with Vagrant
@@ -134,21 +176,6 @@ provisioner:
     citadel:
       access_key_id: <%= ENV['AWS_ACCESS_KEY_ID'] %>
       secret_access_key: <%= ENV['AWS_SECRET_ACCESS_KEY'] %>
-```
-
-## Recommended S3 Layout
-
-Within your S3 bucket I recommend you create one folder for each group of
-secrets, and in your IAM policies have one statement per group. Each group of
-secrets is a set of data with identical security requirements. Many groups will
-start out only containing a single file, however having the flexibility to
-change this in the future allows for things like key rotation without rewriting
-all of your IAM policies.
-
-An example of an IAM policy resource would be:
-
-```
-"Resource": "arn:aws:s3:::mybucket/myfolder/*"
 ```
 
 ## Creating and Updating Secrets
